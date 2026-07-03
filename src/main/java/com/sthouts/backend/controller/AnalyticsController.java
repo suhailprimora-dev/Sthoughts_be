@@ -16,8 +16,11 @@ public class AnalyticsController {
     private final AnalyticsService analyticsService;
 
     @GetMapping("/overview")
-    public ResponseEntity<AnalyticsOverviewDto> getOverview(@RequestParam(defaultValue = "7d") String range) {
-        return ResponseEntity.ok(analyticsService.getOverview(range));
+    public ResponseEntity<AnalyticsOverviewDto> getOverview(
+            @RequestParam(defaultValue = "7d") String range,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return ResponseEntity.ok(analyticsService.getOverview(range, startDate, endDate));
     }
 
     @GetMapping("/today-vs-yesterday")
@@ -26,17 +29,33 @@ public class AnalyticsController {
     }
 
     @GetMapping("/daily-revenue")
-    public ResponseEntity<List<DailyRevenueDto>> getDailyRevenue(@RequestParam(defaultValue = "7d") String range) {
-        return ResponseEntity.ok(analyticsService.getDailyRevenue(range));
+    public ResponseEntity<List<DailyRevenueDto>> getDailyRevenue(
+            @RequestParam(defaultValue = "7d") String range,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return ResponseEntity.ok(analyticsService.getDailyRevenue(range, startDate, endDate));
     }
 
     @GetMapping("/payment-methods")
-    public ResponseEntity<PaymentMethodBreakdownDto> getPaymentBreakdown(@RequestParam(defaultValue = "7d") String range) {
-        return ResponseEntity.ok(analyticsService.getPaymentBreakdown(range));
+    public ResponseEntity<PaymentMethodBreakdownDto> getPaymentBreakdown(
+            @RequestParam(defaultValue = "7d") String range,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return ResponseEntity.ok(analyticsService.getPaymentBreakdown(range, startDate, endDate));
     }
 
     @GetMapping("/top-items")
-    public ResponseEntity<List<TopItemDto>> getTopItems(@RequestParam(defaultValue = "7d") String range) {
-        return ResponseEntity.ok(analyticsService.getTopItems(range));
+    public ResponseEntity<List<TopItemDto>> getTopItems(
+            @RequestParam(defaultValue = "7d") String range,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String date) {
+        if (date != null && !date.trim().isEmpty() && (startDate == null || startDate.trim().isEmpty())) {
+            startDate = date;
+            endDate = date;
+        }
+        return ResponseEntity.ok(analyticsService.getTopItems(range, startDate, endDate));
     }
 }
+
+

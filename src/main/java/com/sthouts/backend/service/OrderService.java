@@ -2,6 +2,7 @@ package com.sthouts.backend.service;
 
 import com.sthouts.backend.dto.OrderDto;
 import com.sthouts.backend.dto.OrderItemDto;
+import com.sthouts.backend.dto.PaginatedOrderHistoryDto;
 import com.sthouts.backend.dto.SettleOrderRequest;
 import com.sthouts.backend.model.Order;
 import com.sthouts.backend.model.OrderItem;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -142,10 +144,71 @@ public class OrderService {
                 .collect(Collectors.toList());
     }
 
+    public PaginatedOrderHistoryDto getSettledOrdersPaginated(int page, int size, String search, String paymentMethod, String fromDate, String toDate) {
+        List<Order> filtered = orderRepository.findAll().stream()
+                .filter(o -> "SETTLED".equalsIgnoreCase(o.getStatus()) || "COMPLETED".equalsIgnoreCase(o.getStatus()) || "PAID".equalsIgnoreCase(o.getStatus()))
+                .filter(o -> {
+                    if (search != null && !search.trim().isEmpty()) {
+                        String q = search.trim().toLowerCase();
+                        boolean matchNo = o.getBillNo() != null && o.getBillNo().toLowerCase().contains(q);
+                        boolean matchId = o.getId() != null && o.getId().toString().contains(q);
+                        boolean matchCust = o.getCustomerName() != null && o.getCustomerName().toLowerCase().contains(q);
+                        boolean matchTable = o.getTableNo() != null && o.getTableNo().toLowerCase().contains(q);
+                        if (!matchNo && !matchId && !matchCust && !matchTable) return false;
+                    }
+                    if (paymentMethod != null && !paymentMethod.trim().isEmpty() && !"all".equalsIgnoreCase(paymentMethod.trim())) {
+                        if (o.getPaymentMethod() == null || !o.getPaymentMethod().equalsIgnoreCase(paymentMethod.trim())) return false;
+                    }
+                    if (fromDate != null && !fromDate.trim().isEmpty() && o.getCreatedAt() != null) {
+                        try {
+                            if (o.getCreatedAt().toLocalDate().isBefore(LocalDate.parse(fromDate.trim()))) return false;
+                        } catch (Exception ignored) {}
+                    }
+                    if (toDate != null && !toDate.trim().isEmpty() && o.getCreatedAt() != null) {
+                        try {
+                            if (o.getCreatedAt().toLocalDate().isAfter(LocalDate.parse(toDate.trim()))) return false;
+                        } catch (Exception ignored) {}
+                    }
+                    return true;
+                })
+                .sorted((o1, o2) -> {
+                    if (o1.getCreatedAt() == null || o2.getCreatedAt() == null) return 0;
+                    return o2.getCreatedAt().compareTo(o1.getCreatedAt());
+                })
+                .collect(Collectors.toList());
+
+        long totalElements = filtered.size();
+        int totalPages = size > 0 ? (int) Math.ceil((double) totalElements / size) : 1;
+        int fromIdx = page * size;
+        int toIdx = Math.min(fromIdx + size, filtered.size());
+        List<OrderDto> content = fromIdx < filtered.size() ? filtered.subList(fromIdx, toIdx).stream().map(this::mapToDto).collect(Collectors.toList()) : List.of();
+
+        return PaginatedOrderHistoryDto.builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .build();
+    }
+
     @Transactional
     public void cancelActiveOrder() {
         Optional<Order> activeOrderOpt = orderRepository.findByStatus("ACTIVE");
         activeOrderOpt.ifPresent(orderRepository::delete);
+    }
+
+    @Transactional
+    public OrderDto reopenOrder(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+        Optional<Order> currentActive = orderRepository.findByStatus("ACTIVE");
+        if (currentActive.isPresent() && !currentActive.get().getId().equals(orderId)) {
+            orderRepository.delete(currentActive.get());
+        }
+        order.setStatus("ACTIVE");
+        recalculateTotals(order);
+        return mapToDto(orderRepository.save(order));
     }
 
     private void recalculateTotals(Order order) {
